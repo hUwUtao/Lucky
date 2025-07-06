@@ -1,8 +1,8 @@
 import createAccelerator from "json-accelerator";
-import { type Static, Type } from "@sinclair/typebox";
+import { type Static, type TSchema, Type } from "@sinclair/typebox";
 
 // Route schema
-const SetRoute = Type.Object({
+const Route = Type.Object({
   id: Type.Integer(),
   matchers: Type.Array(Type.String()),
   endpoints: Type.Array(Type.String()),
@@ -11,64 +11,53 @@ const SetRoute = Type.Object({
   handshake: Type.Union([Type.Literal("Vanilla"), Type.Literal("HAProxy")]),
 });
 
-// RemoveRoute schema
-const RemoveRoute = Type.Object({
-  id: Type.Integer(),
-});
-
 // FlushRoute schema
-const Empty = Type.Object({}, { additionalProperties: false });
+const Empty = Type.Object({});
 
-const HandshakeRoute = Type.Object(
-  {
-    active: Type.Integer(),
-  },
-  { additionalProperties: false },
-);
-
-const HandshakeIdent = Type.Object({
-  id: Type.String(),
-});
+function array<T extends TSchema>(t: T) {
+  return Type.Object({
+    _v: Type.Array(t),
+  });
+}
 
 const Commands = {
   Hello: Empty,
   FlushRoute: Empty,
-  SetRoute,
-  RemoveRoute,
-  HandshakeRoute,
-  HandshakeIdent,
+  SetRoute: Route,
+  RemoveRoute: Type.Object({
+    id: Type.Integer(),
+  }),
+  HandshakeRoute: Type.Object({
+    active: Type.Integer(),
+  }),
+  HandshakeIdent: Type.Object({
+    id: Type.String(),
+  }),
+  ListRouteRequest: Empty,
+  ListRouteResponse: array(Route),
 } as const;
+
+/**
+ * Type value macro to create typebox command entry
+ * @param l type key from Commands
+ */
+function ctm<L extends keyof typeof Commands>(l: L) {
+  return Type.Composite([Type.Object({ _c: Type.Literal(l) }), Commands[l]], {
+    title: l,
+  });
+}
 
 // Envelope: discriminated union based on _c field
 export const Envelope = Type.Union(
   [
-    Type.Intersect([Type.Object({ _c: Type.Literal("Hello") })], {
-      title: "Hello",
-    }),
-    Type.Intersect([Type.Object({ _c: Type.Literal("SetRoute") }), SetRoute], {
-      title: "SetRoute",
-    }),
-    Type.Intersect(
-      [Type.Object({ _c: Type.Literal("RemoveRoute") }), RemoveRoute],
-      {
-        title: "RemoveRoute",
-      },
-    ),
-    Type.Intersect([Type.Object({ _c: Type.Literal("FlushRoute") })], {
-      title: "FlushRoute",
-    }),
-    Type.Intersect(
-      [Type.Object({ _c: Type.Literal("HandshakeRoute") }), HandshakeRoute],
-      {
-        title: "HandshakeRoute",
-      },
-    ),
-    Type.Intersect(
-      [Type.Object({ _c: Type.Literal("HandshakeIdent") }), HandshakeIdent],
-      {
-        title: "HandshakeIdent",
-      },
-    ),
+    ctm("Hello"),
+    ctm("SetRoute"),
+    ctm("FlushRoute"),
+    ctm("RemoveRoute"),
+    ctm("HandshakeRoute"),
+    ctm("HandshakeIdent"),
+    ctm("ListRouteRequest"),
+    ctm("ListRouteResponse"),
   ],
   {
     title: "RPC Envelope",

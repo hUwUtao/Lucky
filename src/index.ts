@@ -34,10 +34,10 @@ const app = new Elysia()
   .get(
     "/api/v1/lure/:instance",
     async function* ({ set, params }) {
-      let instance = params.instance || "";
+      const instance = params.instance || "";
       let pc = time + 5;
       set.headers["X-Accel-Buffering"] = "no";
-      let consumer = producer.createConsumer();
+      const consumer = producer.createConsumer();
       yield "1\n";
       while (true) {
         if (time > pc) {
@@ -73,6 +73,7 @@ const app = new Elysia()
         return { ok: true, msg: "I sent hi" };
       }
       console.log(body);
+      producer.add([instance, envelope(body._c, body)]);
       return { ok: true };
     },
     {
