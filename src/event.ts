@@ -9,6 +9,7 @@ const Route = Type.Object({
   disabled: Type.Boolean(),
   priority: Type.Integer(),
   handshake: Type.Union([Type.Literal("Vanilla"), Type.Literal("HAProxy")]),
+  override_query: Type.Boolean()
 });
 
 // FlushRoute schema
