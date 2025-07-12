@@ -3,6 +3,7 @@
   "version": "1.0.50",
   "scripts": {
     "dev": "bun run --watch src/index.ts",
+    "build": "bun build src/index.ts --target=bun --minify --bundle --sourcemap --outdir=dist",
     "fmt": "biome format --write"
   },
   "dependencies": {
