@@ -1,6 +1,6 @@
 import { Elysia, t } from "elysia";
 import { swagger } from "@elysiajs/swagger";
-import { Envelope, envelope } from "./event";
+import { Envelope, envelope, IRoute } from "./event";
 import { TTLFIFOQueue } from "./spmc_ttlfifo";
 import process from "node:process";
 
@@ -16,6 +16,13 @@ let time = 0;
 setInterval(async () => {
   time = process.uptime();
 }, 500);
+
+let default_routes: IRoute[] = [];
+
+if (await Bun.file("./default_routes.json").exists()) {
+  const file = Bun.file("./default_routes.json");
+  default_routes = await file.json();
+}
 
 const app = new Elysia()
   .use(swagger())
@@ -70,6 +77,10 @@ const app = new Elysia()
         body._c === "Hello"
       ) {
         producer.add([instance, envelope("Hello", {})]);
+        default_routes.forEach((route) => {
+          console.log(route);
+          producer.add([instance, envelope("SetRoute", route)]);
+        });
         return { ok: true, msg: "I sent hi" };
       }
       console.log(body);

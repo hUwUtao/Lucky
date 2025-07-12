@@ -12,6 +12,8 @@ const Route = Type.Object({
   override_query: Type.Boolean()
 });
 
+export type IRoute = typeof Route.static;
+
 // FlushRoute schema
 const Empty = Type.Object({});
 
