@@ -6,45 +6,51 @@ import {
   createEnvelopeV2,
   encodeEnvelopeV1,
   encodeEnvelopeV2,
+  RouteV2,
+} from "./event";
+import {
   envelopeV1FromV2,
   envelopeV2FromV1,
   isRouteV1Candidate,
   isRouteV2Candidate,
   normalizeEnvelopeV2,
   normalizeRouteV2,
-  RouteV2,
   routeV2FromV1,
-} from "./event";
+} from "./compat";
 import { TTLFIFOQueue } from "./spmc_ttlfifo";
+import { FileConfigBackend } from "./file_config";
 import process from "node:process";
 
 type ProducerItem = [string, EnvelopeV2];
 
 const producer = new TTLFIFOQueue<ProducerItem>(1000);
 
-const delay = (delayInms: number) => new Promise((resolve) => setTimeout(resolve, delayInms));
+const delay = (delayInms: number) =>
+  new Promise((resolve) => setTimeout(resolve, delayInms));
 
 const EMPTY_STRING = "";
 const HEARTBEAT_SECONDS = 5;
 const POLL_DELAY_MS = 10;
 
 let time = 0;
-setInterval(async () => {
+setInterval(() => {
   time = process.uptime();
 }, 500);
 
-let defaultRoutes: RouteV2[] = [];
+const DEFAULT_ROUTES_PATH = "./default_routes.json";
 
-if (await Bun.file("./default_routes.json").exists()) {
-  const file = Bun.file("./default_routes.json");
-  const json = await file.json();
-  defaultRoutes = extractRoutes(json);
-}
+const defaultRouteConfig = new FileConfigBackend<RouteV2[]>(
+  DEFAULT_ROUTES_PATH,
+  (value) => extractRoutes(value),
+  () => [],
+);
 
 function extractRoutes(value: unknown): RouteV2[] {
   const sourceArray = Array.isArray(value)
     ? value
-    : typeof value === "object" && value !== null && Array.isArray((value as { _v?: unknown[] })._v)
+    : typeof value === "object" &&
+        value !== null &&
+        Array.isArray((value as { _v?: unknown[] })._v)
       ? (value as { _v: unknown[] })._v
       : [];
 
@@ -72,30 +78,32 @@ function enqueue(instance: string, envelope: EnvelopeV2) {
   producer.add([instance, normalizeEnvelopeV2(envelope)]);
 }
 
-function bootstrapInstance(instance: string) {
+async function bootstrapInstance(instance: string) {
+  const routes = await defaultRouteConfig.snapshot();
   enqueue(instance, createEnvelopeV2("Hello", {}));
-  defaultRoutes.forEach((route) => {
+  for (const route of routes) {
     enqueue(instance, createEnvelopeV2("SetRoute", route));
-  });
+  }
 }
 
-function respondWithRouteList(instance: string) {
+async function respondWithRouteList(instance: string) {
+  const routes = await defaultRouteConfig.snapshot();
   enqueue(
     instance,
     createEnvelopeV2("ListRouteResponse", {
-      _v: defaultRoutes.map((route) => normalizeRouteV2(route)),
+      _v: routes.map((route) => normalizeRouteV2(route)),
     }),
   );
 }
 
-function handleIncomingEnvelope(instance: string, envelope: EnvelopeV2) {
+async function handleIncomingEnvelope(instance: string, envelope: EnvelopeV2) {
   switch (envelope._c) {
     case "Hello":
     case "HandshakeIdent":
-      bootstrapInstance(instance);
+      await bootstrapInstance(instance);
       return { ok: true, msg: "I sent hi" } as const;
     case "ListRouteRequest":
-      respondWithRouteList(instance);
+      await respondWithRouteList(instance);
       return { ok: true } as const;
     default:
       enqueue(instance, envelope);
@@ -117,7 +125,13 @@ const encodeForV1: StreamEncoder = (envelope) => {
 };
 
 function makeStreamHandler(encoder: StreamEncoder) {
-  return async function* ({ set, params }: { set: any; params: { instance: string } }) {
+  return async function* ({
+    set,
+    params,
+  }: {
+    set: any;
+    params: { instance: string };
+  }) {
     const instance = params.instance || "";
     let heartbeatDeadline = time + HEARTBEAT_SECONDS;
     set.headers["X-Accel-Buffering"] = "no";
@@ -166,24 +180,16 @@ const app = new Elysia()
       },
     ),
   })
-  .get(
-    "/api/v1/lure/:instance",
-    makeStreamHandler(encodeForV1),
-    {
-      params: t.Object({
-        instance: t.String(),
-      }),
-    },
-  )
-  .get(
-    "/api/v2/lure/:instance",
-    makeStreamHandler(encodeForV2),
-    {
-      params: t.Object({
-        instance: t.String(),
-      }),
-    },
-  )
+  .get("/api/v1/lure/:instance", makeStreamHandler(encodeForV1), {
+    params: t.Object({
+      instance: t.String(),
+    }),
+  })
+  .get("/api/v2/lure/:instance", makeStreamHandler(encodeForV2), {
+    params: t.Object({
+      instance: t.String(),
+    }),
+  })
   .post(
     "/api/v1/lure/:instance",
     async ({ body, params }) => {
@@ -217,9 +223,33 @@ const app = new Elysia()
       },
       body: "envelopeV2",
     },
-  )
-  .listen(3000);
+  );
 
-console.log(
-  `🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`,
-);
+function resolvePort(defaultPort = 3000): number {
+  const raw = process.env.PORT ?? Bun.env?.PORT;
+  const port = raw !== undefined ? Number(raw) : defaultPort;
+  return Number.isFinite(port) ? port : defaultPort;
+}
+
+type StartServerOptions = {
+  port?: number;
+  log?: boolean;
+};
+
+function startServer(options: StartServerOptions = {}) {
+  const port = options.port ?? resolvePort();
+  defaultRouteConfig.preload();
+  const instance = app.listen(port);
+  if (options.log !== false) {
+    console.log(
+      `🦊 Elysia is running at ${instance.server?.hostname}:${instance.server?.port}`,
+    );
+  }
+  return instance;
+}
+
+if (import.meta.main) {
+  startServer();
+}
+
+export { app, resolvePort, startServer };
