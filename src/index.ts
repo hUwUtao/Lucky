@@ -1,6 +1,6 @@
 import { Elysia, t } from "elysia";
 import { swagger } from "@elysiajs/swagger";
-import packageInfo from "../package.json" assert { type: "json" };
+import packageInfo from "../package.json";
 import {
   EnvelopeV1,
   EnvelopeV2,
@@ -264,8 +264,6 @@ function startServer(options: StartServerOptions = {}) {
   return instance;
 }
 
-if (import.meta.main) {
-  startServer();
-}
+startServer();
 
 export { app, resolvePort, startServer };
