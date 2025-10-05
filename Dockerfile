@@ -11,7 +11,7 @@ COPY . .
 ENV NODE_ENV=production
 RUN bun run build
 
-FROM scratch AS release
+FROM debian:stable-slim AS release
 WORKDIR /
 COPY --from=builder /usr/src/app/dist/Lucky /Lucky
 RUN chmod +x /Lucky && /Lucky -v
