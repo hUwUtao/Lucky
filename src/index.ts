@@ -1,6 +1,8 @@
 import { Elysia, t } from "elysia";
 import { swagger } from "@elysiajs/swagger";
 import packageInfo from "../package.json";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import {
   EnvelopeV1,
   EnvelopeV2,
@@ -31,6 +33,38 @@ const VERSION =
   process.env.npm_package_version ||
   "0.0.0";
 
+function resolveDefaultRoutesPath(): string {
+  const envPath = Bun.env?.DEFAULT_ROUTES_PATH ?? process.env.DEFAULT_ROUTES_PATH;
+  const binaryDir = path.dirname(process.argv[1] ?? process.cwd());
+  const candidates: Array<string | undefined> = [
+    envPath,
+    "./default_routes.json",
+    path.join(binaryDir, "default_routes.json"),
+    path.join("/usr/src/app", "default_routes.json"),
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+    const resolved = path.isAbsolute(candidate)
+      ? candidate
+      : path.resolve(process.cwd(), candidate);
+    if (existsSync(resolved)) {
+      return resolved;
+    }
+  }
+
+  const fallback = candidates.find(
+    (candidate): candidate is string => typeof candidate === "string",
+  );
+  return fallback
+    ? path.isAbsolute(fallback)
+      ? fallback
+      : path.resolve(process.cwd(), fallback)
+    : path.resolve(process.cwd(), "default_routes.json");
+}
+
 const argv = new Set(process.argv.slice(2));
 if (argv.has("-v") || argv.has("--version")) {
   console.log(`Lucky ${VERSION}`);
@@ -53,7 +87,7 @@ setInterval(() => {
   time = process.uptime();
 }, 500);
 
-const DEFAULT_ROUTES_PATH = "./default_routes.json";
+const DEFAULT_ROUTES_PATH = resolveDefaultRoutesPath();
 
 const defaultRouteConfig = new FileConfigBackend<RouteV2[]>(
   DEFAULT_ROUTES_PATH,
