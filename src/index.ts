@@ -1,5 +1,6 @@
 import { Elysia, t } from "elysia";
 import { swagger } from "@elysiajs/swagger";
+import packageInfo from "../package.json" assert { type: "json" };
 import {
   EnvelopeV1,
   EnvelopeV2,
@@ -20,6 +21,21 @@ import {
 import { TTLFIFOQueue } from "./spmc_ttlfifo";
 import { FileConfigBackend } from "./file_config";
 import process from "node:process";
+
+const bunEnvVersion =
+  typeof Bun !== "undefined" ? Bun.env?.npm_package_version : undefined;
+
+const VERSION =
+  (typeof packageInfo?.version === "string" && packageInfo.version) ||
+  bunEnvVersion ||
+  process.env.npm_package_version ||
+  "0.0.0";
+
+const argv = new Set(process.argv.slice(2));
+if (argv.has("-v") || argv.has("--version")) {
+  console.log(`Lucky ${VERSION}`);
+  process.exit(0);
+}
 
 type ProducerItem = [string, EnvelopeV2];
 
