@@ -6,8 +6,6 @@ name: Docker
 # documentation.
 
 on:
-  schedule:
-    - cron: '16 2 * * *'
   push:
     branches: [ "main" ]
     # Publish semver tags as releases.
@@ -78,4 +76,5 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
+
           cache-to: type=gha,mode=max
